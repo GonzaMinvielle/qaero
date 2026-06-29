@@ -64,7 +64,7 @@ Deno.serve(async (req) => {
 
       if (!Array.isArray(cards)) throw new Error("Error obteniendo tarjetas de Trello");
 
-      const SYNC_LISTS = ["en desarrollo", "testing", "code review", "produccion", "producción", "info util", "info útil"];
+      const SYNC_LISTS = ["en desarrollo", "testing", "code review", "En produccion", "producción", "info util", "info útil"];
       const filteredCards = cards.filter((card: any) => {
         const listName = (listMap[card.idList] ?? "").toLowerCase();
         return SYNC_LISTS.some(allowed => listName.includes(allowed));
