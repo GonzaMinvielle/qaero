@@ -1,0 +1,18 @@
+{
+  "manifest_version": 3,
+  "name": "QAero Quick Note",
+  "version": "1.0",
+  "description": "Ctrl+Shift+Q → nota rápida de QAero",
+  "background": {
+    "service_worker": "background.js"
+  },
+  "commands": {
+    "open-quick-note": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+Q"
+      },
+      "description": "Abrir nota rápida QAero"
+    }
+  },
+  "permissions": ["windows", "tabs"]
+}

@@ -1,0 +1,86 @@
+'use client'
+
+import { useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { createClient } from '@/lib/supabase/client'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { toast } from 'sonner'
+import Link from 'next/link'
+
+export default function RegisterPage() {
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [fullName, setFullName] = useState('')
+  const [loading, setLoading] = useState(false)
+  const router = useRouter()
+  const supabase = createClient()
+
+  const handleRegister = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setLoading(true)
+    const { error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: { data: { full_name: fullName } },
+    })
+    if (error) {
+      toast.error(error.message)
+    } else {
+      toast.success('Cuenta creada. Revisá tu email para confirmar.')
+      router.push('/login')
+    }
+    setLoading(false)
+  }
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-[#0f172a]">
+      <div className="w-full max-w-sm space-y-6 p-8 bg-[#1e293b] rounded-lg border border-[#334155]">
+        <div>
+          <h1 className="text-2xl font-bold text-[#f8fafc]">Crear cuenta</h1>
+          <p className="text-[#94a3b8] text-sm mt-1">QAero</p>
+        </div>
+        <form onSubmit={handleRegister} className="space-y-4">
+          <Input
+            type="text"
+            placeholder="Nombre completo"
+            value={fullName}
+            onChange={e => setFullName(e.target.value)}
+            required
+            className="bg-[#0f172a] border-[#334155] text-[#f8fafc] placeholder:text-[#94a3b8]"
+          />
+          <Input
+            type="email"
+            placeholder="Email"
+            value={email}
+            onChange={e => setEmail(e.target.value)}
+            required
+            className="bg-[#0f172a] border-[#334155] text-[#f8fafc] placeholder:text-[#94a3b8]"
+          />
+          <Input
+            type="password"
+            placeholder="Contraseña"
+            value={password}
+            onChange={e => setPassword(e.target.value)}
+            required
+            minLength={6}
+            className="bg-[#0f172a] border-[#334155] text-[#f8fafc] placeholder:text-[#94a3b8]"
+          />
+          <Button
+            type="submit"
+            disabled={loading}
+            className="w-full bg-[#0d9488] hover:bg-[#0f766e] text-white"
+          >
+            {loading ? 'Creando cuenta...' : 'Registrarse'}
+          </Button>
+        </form>
+        <p className="text-center text-sm text-[#94a3b8]">
+          ¿Ya tenés cuenta?{' '}
+          <Link href="/login" className="text-[#0d9488] hover:underline">
+            Ingresá
+          </Link>
+        </p>
+      </div>
+    </div>
+  )
+}
