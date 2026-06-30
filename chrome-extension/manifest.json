@@ -12,6 +12,12 @@
         "default": "Ctrl+Shift+Q"
       },
       "description": "Abrir nota rápida QAero"
+    },
+    "open-chat": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+A"
+      },
+      "description": "Abrir chat QA QAero"
     }
   },
   "permissions": ["windows", "tabs"]

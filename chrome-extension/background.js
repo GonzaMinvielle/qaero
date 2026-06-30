@@ -1,14 +1,10 @@
-const APP_URL = 'http://localhost:3000/quick-note-popup'
-const WIN_W = 420
-const WIN_H = 290
+const BASE_URL = 'http://localhost:3000'
 
-chrome.commands.onCommand.addListener(async (command) => {
-  if (command !== 'open-quick-note') return
-
+async function openPopup(path, width, height) {
   const existing = await chrome.windows.getAll({ windowTypes: ['popup'] })
   for (const win of existing) {
     const tabs = await chrome.tabs.query({ windowId: win.id })
-    const match = tabs.find(t => t.url?.includes('quick-note-popup'))
+    const match = tabs.find(t => t.url?.includes(path))
     if (match) {
       chrome.windows.update(win.id, { focused: true })
       return
@@ -17,16 +13,21 @@ chrome.commands.onCommand.addListener(async (command) => {
 
   const allWindows = await chrome.windows.getAll()
   const currentWin = allWindows.find(w => w.focused) ?? allWindows[0]
-  const left = currentWin ? Math.round(currentWin.left + currentWin.width - WIN_W - 20) : 1400
-  const top = currentWin ? Math.round(currentWin.top + currentWin.height - WIN_H - 60) : 700
+  const left = currentWin ? Math.round(currentWin.left + currentWin.width - width - 20) : 1400
+  const top = currentWin ? Math.round(currentWin.top + currentWin.height - height - 60) : 700
 
   chrome.windows.create({
-    url: APP_URL,
+    url: `${BASE_URL}${path}`,
     type: 'popup',
-    width: WIN_W,
-    height: WIN_H,
+    width,
+    height,
     left,
     top,
     focused: true,
   })
+}
+
+chrome.commands.onCommand.addListener((command) => {
+  if (command === 'open-quick-note') openPopup('/quick-note-popup', 420, 290)
+  if (command === 'open-chat') openPopup('/chat-popup', 480, 520)
 })
