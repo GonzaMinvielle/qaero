@@ -30,7 +30,6 @@ export function TrelloReportModal({ open, onClose, task, checklistItems, notes }
         },
         body: JSON.stringify({
           title: task.title,
-          description: task.description,
           checklist_items: checklistItems.map(i => ({ text: i.text, status: i.status, note: i.note, type: i.type })),
           notes: notes.map(n => n.content),
         }),

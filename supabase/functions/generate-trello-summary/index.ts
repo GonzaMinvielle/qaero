@@ -12,7 +12,7 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   try {
-    const { title, description, checklist_items, notes } = await req.json();
+    const { title, checklist_items, notes } = await req.json();
 
     const passItems = checklist_items.filter((i: any) => i.status === "pass");
     const failItems = checklist_items.filter((i: any) => i.status === "fail");
@@ -34,7 +34,6 @@ Observaciones
 
 ---
 Tarea: ${title}
-${description ? `Descripción: ${description}` : ""}
 
 Ítems que pasaron (${passItems.length}):
 ${passItems.map((i: any) => `- ${i.text}`).join("\n") || "Ninguno"}
