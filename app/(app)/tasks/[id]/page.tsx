@@ -13,6 +13,47 @@ import { Plus, Trash2, Upload, X, ChevronLeft } from 'lucide-react'
 import Image from 'next/image'
 import Link from 'next/link'
 
+type MediaItem = { url: string; type: 'image' | 'video'; name: string }
+
+function MediaLightbox({ item, onClose }: { item: MediaItem; onClose: () => void }) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div className="relative max-w-5xl max-h-[90vh] w-full mx-4" onClick={e => e.stopPropagation()}>
+        <button
+          onClick={onClose}
+          className="absolute -top-10 right-0 text-white/70 hover:text-white transition-colors"
+        >
+          <X size={28} />
+        </button>
+        {item.type === 'image' ? (
+          <img
+            src={item.url}
+            alt={item.name}
+            className="max-h-[85vh] w-auto max-w-full mx-auto rounded-lg object-contain"
+          />
+        ) : (
+          <video
+            src={item.url}
+            controls
+            autoPlay
+            className="max-h-[85vh] w-full rounded-lg"
+          />
+        )}
+        <p className="text-white/50 text-xs text-center mt-2 truncate">{item.name}</p>
+      </div>
+    </div>
+  )
+}
+
 const typeLabel = { functional: 'Funcional', edge_case: 'Edge Cases', risk: 'Riesgos' }
 
 const statusBadge: Record<string, { label: string; cls: string }> = {
@@ -40,6 +81,8 @@ export default function TaskDetailPage() {
   const [editingFailNote, setEditingFailNote] = useState<string | null>(null)
   const [showReport, setShowReport] = useState(false)
   const [taskStatus, setTaskStatus] = useState<string>('pending')
+  const [lightbox, setLightbox] = useState<MediaItem | null>(null)
+  const [signedUrls, setSignedUrls] = useState<Record<string, string>>({})
   const fileInputRef = useRef<HTMLInputElement>(null)
   const refInputRef = useRef<HTMLInputElement>(null)
 
@@ -55,6 +98,23 @@ export default function TaskDetailPage() {
     setChecklistItems(checkRes.data ?? [])
     setNotes(notesRes.data ?? [])
     setReferences(refsRes.data ?? [])
+
+    const allPaths: string[] = []
+    notesRes.data?.forEach((note: any) =>
+      note.task_evidences?.forEach((ev: any) => allPaths.push(ev.file_path))
+    )
+    refsRes.data?.forEach((ref: any) => allPaths.push(ref.file_path))
+
+    if (allPaths.length > 0) {
+      const urlEntries = await Promise.all(
+        allPaths.map(async path => {
+          const { data } = await supabase.storage.from('task-evidences').createSignedUrl(path, 3600)
+          return [path, data?.signedUrl ?? ''] as [string, string]
+        })
+      )
+      setSignedUrls(Object.fromEntries(urlEntries))
+    }
+
     setLoading(false)
   }
 
@@ -129,10 +189,7 @@ export default function TaskDetailPage() {
     toast.success('Estado actualizado')
   }
 
-  const getUrl = (path: string) => {
-    const { data } = supabase.storage.from('task-evidences').getPublicUrl(path)
-    return data.publicUrl
-  }
+  const getUrl = (path: string) => signedUrls[path] ?? ''
 
   if (loading) return <div className="p-6 text-[#94a3b8]">Cargando...</div>
   if (!task) return <div className="p-6 text-[#94a3b8]">Tarea no encontrada</div>
@@ -286,17 +343,37 @@ export default function TaskDetailPage() {
               <div className="text-xs text-[#94a3b8]">{new Date(note.created_at).toLocaleString('es-AR')}</div>
               {note.task_evidences?.length > 0 && (
                 <div className="grid grid-cols-3 gap-2 mt-2">
-                  {note.task_evidences.map((ev: any) => (
-                    <div key={ev.id}>
-                      {ev.file_type === 'image' ? (
-                        <a href={getUrl(ev.file_path)} target="_blank" rel="noreferrer">
-                          <img src={getUrl(ev.file_path)} alt={ev.file_name} className="rounded w-full h-24 object-cover" />
-                        </a>
-                      ) : (
-                        <video src={getUrl(ev.file_path)} controls className="rounded w-full h-24" />
-                      )}
-                    </div>
-                  ))}
+                  {note.task_evidences.map((ev: any) => {
+                    const url = getUrl(ev.file_path)
+                    return (
+                      <div key={ev.id}>
+                        {ev.file_type === 'image' ? (
+                          <button
+                            onClick={() => setLightbox({ url, type: 'image', name: ev.file_name })}
+                            className="w-full focus:outline-none group"
+                          >
+                            <img
+                              src={url}
+                              alt={ev.file_name}
+                              className="rounded w-full h-32 object-cover transition-opacity group-hover:opacity-80 cursor-zoom-in"
+                            />
+                          </button>
+                        ) : (
+                          <div
+                            className="relative cursor-pointer group"
+                            onClick={() => setLightbox({ url, type: 'video', name: ev.file_name })}
+                          >
+                            <video src={url} className="rounded w-full h-32 object-cover" />
+                            <div className="absolute inset-0 flex items-center justify-center bg-black/40 rounded opacity-80 group-hover:opacity-60 transition-opacity">
+                              <svg className="w-10 h-10 text-white" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M8 5v14l11-7z" />
+                              </svg>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
                 </div>
               )}
             </div>
@@ -316,11 +393,18 @@ export default function TaskDetailPage() {
         </div>
         {references.length > 0 ? (
           <div className="grid grid-cols-3 gap-2">
-            {references.map(ref => (
-              <a key={ref.id} href={getUrl(ref.file_path)} target="_blank" rel="noreferrer">
-                <img src={getUrl(ref.file_path)} className="rounded w-full h-24 object-cover" />
-              </a>
-            ))}
+            {references.map(ref => {
+              const url = getUrl(ref.file_path)
+              return (
+                <button
+                  key={ref.id}
+                  onClick={() => setLightbox({ url, type: 'image', name: ref.file_path.split('/').pop() ?? '' })}
+                  className="w-full focus:outline-none group"
+                >
+                  <img src={url} className="rounded w-full h-32 object-cover transition-opacity group-hover:opacity-80 cursor-zoom-in" />
+                </button>
+              )
+            })}
           </div>
         ) : (
           <p className="text-[#94a3b8] text-sm">Sin imágenes de referencia.</p>
@@ -353,6 +437,8 @@ export default function TaskDetailPage() {
         checklistItems={checklistItems}
         notes={notes}
       />
+
+      {lightbox && <MediaLightbox item={lightbox} onClose={() => setLightbox(null)} />}
     </div>
   )
 }

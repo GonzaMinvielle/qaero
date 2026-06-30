@@ -78,6 +78,15 @@ ${quickNotes.map((n: any) => `[${n.tag}] ${new Date(n.created_at).toLocaleDateSt
       }),
     });
 
+    if (!geminiRes.ok) {
+      const errorBody = await geminiRes.text();
+      console.error("Gemini error:", geminiRes.status, errorBody);
+      return new Response(JSON.stringify({ error: `Gemini error ${geminiRes.status}: ${errorBody}` }), {
+        status: 502,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
       async start(controller) {

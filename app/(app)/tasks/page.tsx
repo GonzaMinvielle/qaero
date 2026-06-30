@@ -6,7 +6,9 @@ import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
-import { Plus } from 'lucide-react'
+import { Plus, Trash2 } from 'lucide-react'
+import { createClient } from '@/lib/supabase/client'
+import { toast } from 'sonner'
 
 const statusLabel: Record<string, string> = {
   pending: 'Pendiente',
@@ -24,7 +26,18 @@ export default function TasksPage() {
   const [statusFilter, setStatusFilter] = useState('all')
   const [trelloListFilter, setTrelloListFilter] = useState('Testing')
   const [search, setSearch] = useState('')
-  const { tasks, loading } = useTasks({ status: statusFilter, trelloList: trelloListFilter })
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
+  const { tasks, loading, refresh } = useTasks({ status: statusFilter, trelloList: trelloListFilter })
+  const supabase = createClient()
+
+  const deleteTask = async (taskId: string, e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    await supabase.from('tasks').delete().eq('id', taskId)
+    setConfirmDelete(null)
+    toast.success('Tarea eliminada')
+    refresh()
+  }
 
   const filtered = tasks.filter(t =>
     t.title.toLowerCase().includes(search.toLowerCase())
@@ -82,8 +95,8 @@ export default function TasksPage() {
             return (
               <Link key={task.id} href={`/tasks/${task.id}`}>
                 <div className="bg-[#1e293b] border border-[#334155] rounded-lg p-4 hover:border-[#0d9488] transition-colors">
-                  <div className="flex items-start justify-between">
-                    <div>
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1 min-w-0">
                       <h3 className="text-[#f8fafc] font-medium">{task.title}</h3>
                       {(task.trello_cards as any)?.card_name && (
                         <p className="text-[#94a3b8] text-xs mt-0.5">
@@ -91,9 +104,34 @@ export default function TasksPage() {
                         </p>
                       )}
                     </div>
-                    <span className={`text-xs px-2 py-0.5 rounded-full ${statusColor[task.status]}`}>
-                      {statusLabel[task.status]}
-                    </span>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className={`text-xs px-2 py-0.5 rounded-full ${statusColor[task.status]}`}>
+                        {statusLabel[task.status]}
+                      </span>
+                      {confirmDelete === task.id ? (
+                        <div className="flex items-center gap-1" onClick={e => e.preventDefault()}>
+                          <button
+                            onClick={e => deleteTask(task.id, e)}
+                            className="text-xs px-2 py-0.5 rounded bg-[#ef4444]/20 text-[#ef4444] hover:bg-[#ef4444]/40 transition-colors"
+                          >
+                            Confirmar
+                          </button>
+                          <button
+                            onClick={e => { e.preventDefault(); e.stopPropagation(); setConfirmDelete(null) }}
+                            className="text-xs px-2 py-0.5 rounded bg-[#334155] text-[#94a3b8] hover:bg-[#475569] transition-colors"
+                          >
+                            Cancelar
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={e => { e.preventDefault(); e.stopPropagation(); setConfirmDelete(task.id) }}
+                          className="text-[#94a3b8] hover:text-[#ef4444] transition-colors p-1 rounded hover:bg-[#ef4444]/10"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      )}
+                    </div>
                   </div>
                   <div className="flex items-center justify-between mt-3">
                     <span className="text-xs text-[#94a3b8]">

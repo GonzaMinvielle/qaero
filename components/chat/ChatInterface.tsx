@@ -36,6 +36,9 @@ export function ChatInterface() {
     const assistantMessage: Message = { role: 'assistant', content: '' }
     setMessages(prev => [...prev, assistantMessage])
 
+    const abort = new AbortController()
+    const timeout = setTimeout(() => abort.abort(), 45000)
+
     try {
       const { data: { session } } = await supabase.auth.getSession()
       const token = session?.access_token
@@ -47,9 +50,13 @@ export function ChatInterface() {
           'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify({ question, userId: session?.user?.id }),
+        signal: abort.signal,
       })
 
-      if (!res.ok) throw new Error('Error en el servidor')
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({ error: 'Error desconocido' }))
+        throw new Error(errData.error ?? 'Error en el servidor')
+      }
       if (!res.body) throw new Error('Sin respuesta')
 
       const reader = res.body.getReader()
@@ -67,8 +74,8 @@ export function ChatInterface() {
             if (data === '[DONE]') break
             try {
               const parsed = JSON.parse(data)
-              const token = parsed.token || ''
-              fullText += token
+              const delta = parsed.token || ''
+              fullText += delta
               setMessages(prev => {
                 const updated = [...prev]
                 updated[updated.length - 1] = { role: 'assistant', content: fullText }
@@ -79,11 +86,16 @@ export function ChatInterface() {
         }
       }
     } catch (err: any) {
+      const msg = err.name === 'AbortError'
+        ? 'La respuesta tardó demasiado. Intentá con una pregunta más corta o específica.'
+        : `Error: ${err.message}`
       setMessages(prev => {
         const updated = [...prev]
-        updated[updated.length - 1] = { role: 'assistant', content: `Error: ${err.message}` }
+        updated[updated.length - 1] = { role: 'assistant', content: msg }
         return updated
       })
+    } finally {
+      clearTimeout(timeout)
     }
     setStreaming(false)
   }

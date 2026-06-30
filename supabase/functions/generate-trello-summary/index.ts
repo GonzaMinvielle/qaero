@@ -21,12 +21,12 @@ Deno.serve(async (req) => {
 
 Estructura EXACTA (respetá los títulos):
 Resumen
-(1-2 líneas de qué se probó)
+(2-3 líneas de qué se probó y el resultado general)
 
 Lo que funciona bien
 (lista de ítems que pasaron, uno por línea con guión)
 
-Errores / Issues detectados
+Errores detectados
 (lista de ítems que fallaron con su nota si existe, uno por línea con guión)
 
 Observaciones
@@ -49,9 +49,18 @@ ${notes?.length ? `Notas del tester:\n${notes.map((n: string) => `- ${n}`).join(
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0.3, maxOutputTokens: 1024 },
+        generationConfig: { temperature: 0.3, maxOutputTokens: 4096 },
       }),
     });
+
+    if (!geminiRes.ok) {
+      const errorBody = await geminiRes.text();
+      console.error("Gemini error:", geminiRes.status, errorBody);
+      return new Response(JSON.stringify({ error: `Gemini error ${geminiRes.status}: ${errorBody}` }), {
+        status: 502,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     const geminiData = await geminiRes.json();
     const report = geminiData.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
