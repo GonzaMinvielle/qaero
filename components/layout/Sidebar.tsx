@@ -15,10 +15,10 @@ const navItems = [
   { href: '/quick-notes', label: 'Notas rápidas', icon: null, emoji: '📝' },
   { href: '/chat', label: 'Chat', icon: null, emoji: '💬' },
   { href: '/knowledge', label: 'Knowledge base', icon: null, emoji: '📚' },
+  { href: '/trello', label: 'Mi Trello', icon: null, emoji: '🔗' },
 ]
 
 const adminItems = [
-  { href: '/admin/trello', label: 'Trello', emoji: '🔗' },
   { href: '/admin/knowledge', label: 'Knowledge', emoji: '📄' },
   { href: '/admin/users', label: 'Usuarios', emoji: '👥' },
 ]

@@ -33,7 +33,7 @@ Deno.serve(async (req) => {
 
     const [docsRes, trelloRes, tasksRes, notesRes] = await Promise.all([
       supabase.from("knowledge_docs").select("title, area, tags, full_content, content").eq("status", "active"),
-      supabase.from("trello_cards").select("card_name, list_name, description, comments, labels").order("synced_at", { ascending: false }).limit(100),
+      supabase.from("trello_cards").select("card_name, list_name, description, comments, labels").eq("user_id", userId).order("synced_at", { ascending: false }).limit(100),
       supabase.from("tasks").select("id, title, description, status, updated_at, trello_cards(card_name, list_name), checklist_items(text, status, note, type), task_notes(content, created_at)").eq("user_id", userId).order("updated_at", { ascending: false }).limit(50),
       supabase.from("quick_notes").select("content, tag, created_at").eq("user_id", userId).gte("created_at", thirtyDaysAgo.toISOString()).order("created_at", { ascending: false }),
     ]);

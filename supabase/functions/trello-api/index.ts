@@ -12,30 +12,50 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   try {
-    const { action, ...params } = await req.json();
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) {
+      return new Response(JSON.stringify({ error: "No autorizado" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
 
-    const supabase = createClient(
+    const userClient = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_ANON_KEY")!,
+      { global: { headers: { Authorization: authHeader } } }
+    );
+
+    const { data: { user } } = await userClient.auth.getUser();
+    if (!user) {
+      return new Response(JSON.stringify({ error: "No autorizado" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+    const userId = user.id;
+
+    const serviceClient = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    if (action === "set-config") {
+    const { action, ...params } = await req.json();
+
+    if (action === "save-config") {
       const { trello_api_key, trello_token } = params;
-      await supabase.from("app_config").upsert([
-        { key: "trello_api_key", value: trello_api_key, updated_at: new Date().toISOString() },
-        { key: "trello_token", value: trello_token, updated_at: new Date().toISOString() },
-      ]);
+      const { error } = await serviceClient.from("user_trello_config").upsert({
+        user_id: userId,
+        api_key: trello_api_key,
+        token: trello_token,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: "user_id" });
+      if (error) throw new Error(error.message);
       return new Response(JSON.stringify({ success: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    const { data: configs } = await supabase.from("app_config").select("key, value").in("key", ["trello_api_key", "trello_token"]);
-    const configMap = Object.fromEntries((configs ?? []).map((c: any) => [c.key, c.value]));
-    const apiKey = configMap["trello_api_key"];
-    const token = configMap["trello_token"];
-
     if (action === "check-config") {
-      return new Response(JSON.stringify({ configured: !!(apiKey && token) }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      const { data } = await serviceClient.from("user_trello_config").select("id").eq("user_id", userId).single();
+      return new Response(JSON.stringify({ configured: !!data }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
+
+    const { data: config } = await serviceClient.from("user_trello_config").select("api_key, token").eq("user_id", userId).single();
+    const apiKey = config?.api_key;
+    const token = config?.token;
 
     if (!apiKey || !token) {
       return new Response(JSON.stringify({ error: "Trello no configurado" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
@@ -91,6 +111,7 @@ Deno.serve(async (req) => {
               : [];
             return {
               card_id: card.id,
+              user_id: userId,
               board_id,
               board_name,
               card_name: card.name,
@@ -106,7 +127,7 @@ Deno.serve(async (req) => {
         rows.push(...results);
       }
 
-      await supabase.from("trello_cards").upsert(rows, { onConflict: "card_id" });
+      await serviceClient.from("trello_cards").upsert(rows, { onConflict: "card_id,user_id" });
 
       return new Response(JSON.stringify({ success: true, count: rows.length }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }

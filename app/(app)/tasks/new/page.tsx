@@ -25,8 +25,15 @@ export default function NewTaskPage() {
 
   useEffect(() => {
     setSupabaseUrl(process.env.NEXT_PUBLIC_SUPABASE_URL!)
-    supabase.from('trello_cards').select('card_id, card_name, list_name').ilike('list_name', '%testing%').order('synced_at', { ascending: false }).limit(100).then(({ data }) => {
-      setTrelloCards(data ?? [])
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (!user) return
+      supabase.from('trello_cards')
+        .select('card_id, card_name, list_name')
+        .eq('user_id', user.id)
+        .ilike('list_name', '%testing%')
+        .order('synced_at', { ascending: false })
+        .limit(100)
+        .then(({ data }) => setTrelloCards(data ?? []))
     })
   }, [])
 
