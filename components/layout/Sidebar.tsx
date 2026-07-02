@@ -19,6 +19,7 @@ const navItems = [
 ]
 
 const adminItems = [
+  { href: '/admin/trello', label: 'Trello', emoji: '🔗' },
   { href: '/admin/knowledge', label: 'Knowledge', emoji: '📄' },
   { href: '/admin/users', label: 'Usuarios', emoji: '👥' },
 ]
