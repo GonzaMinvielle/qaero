@@ -1,4 +1,4 @@
-const BASE_URL = 'https://boti-qa.vercel.app'
+const BASE_URL = 'https://qaero-two.vercel.app'
 
 async function openPopup(path, width, height) {
   const existing = await chrome.windows.getAll({ windowTypes: ['popup'] })
