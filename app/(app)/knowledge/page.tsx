@@ -13,15 +13,19 @@ export default function KnowledgePage() {
   const supabase = createClient()
 
   useEffect(() => {
-    supabase
-      .from('knowledge_docs')
-      .select('id, title, area, tags, status, summary, content, created_at')
-      .eq('status', 'active')
-      .order('created_at', { ascending: false })
-      .then(({ data }) => {
-        setDocs(data ?? [])
-        setLoading(false)
-      })
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (!user) return
+      supabase
+        .from('knowledge_docs')
+        .select('id, title, area, tags, status, summary, content, created_at')
+        .eq('user_id', user.id)
+        .eq('status', 'active')
+        .order('created_at', { ascending: false })
+        .then(({ data }) => {
+          setDocs(data ?? [])
+          setLoading(false)
+        })
+    })
   }, [])
 
   return (
@@ -31,7 +35,7 @@ export default function KnowledgePage() {
       {loading ? (
         <div className="text-[#94a3b8]">Cargando...</div>
       ) : docs.length === 0 ? (
-        <div className="text-[#94a3b8]">Sin documentos. El admin puede subir documentos desde Admin → Knowledge.</div>
+        <div className="text-[#94a3b8]">Sin documentos. Subí los tuyos desde <strong>Mis documentos</strong> en el menú.</div>
       ) : (
         <div className="grid gap-3">
           {docs.map(doc => (

@@ -53,7 +53,6 @@ Deno.serve(async (req) => {
     }
 
     if (action === "sync-board") {
-      // Obtener user_id del usuario que sincroniza
       if (!authHeader) {
         return new Response(JSON.stringify({ error: "No autorizado" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
@@ -69,41 +68,31 @@ Deno.serve(async (req) => {
 
       const { board_id, board_name } = params;
 
+      // Sync completo — todas las tarjetas del board sin filtrar por columna
       const [cardsRes, listsRes] = await Promise.all([
-        fetch(`${TRELLO_BASE}/boards/${board_id}/cards?fields=id,name,desc,idList,labels,dateLastActivity&${auth}`),
+        fetch(`${TRELLO_BASE}/boards/${board_id}/cards?fields=id,name,desc,idList,labels,dateLastActivity&filter=open&${auth}`),
         fetch(`${TRELLO_BASE}/boards/${board_id}/lists?fields=id,name&${auth}`),
       ]);
 
       const cards = await cardsRes.json();
       const lists = await listsRes.json();
-      const listMap = Object.fromEntries((Array.isArray(lists) ? lists : []).map((l: any) => [l.id, l.name]));
-
       if (!Array.isArray(cards)) throw new Error("Error obteniendo tarjetas de Trello");
 
-      const SYNC_LISTS = ["en desarrollo", "testing", "code review", "En produccion", "producción", "info util", "info útil"];
-      const filteredCards = cards.filter((card: any) => {
-        const listName = (listMap[card.idList] ?? "").toLowerCase();
-        return SYNC_LISTS.some(allowed => listName.includes(allowed));
-      });
+      const listMap = Object.fromEntries((Array.isArray(lists) ? lists : []).map((l: any) => [l.id, l.name]));
+      const cardsToProcess = cards;
 
       const CONCURRENCY = 10;
       const synced_at = new Date().toISOString();
       const rows: any[] = [];
 
-      for (let i = 0; i < filteredCards.length; i += CONCURRENCY) {
-        const batch = filteredCards.slice(i, i + CONCURRENCY);
+      for (let i = 0; i < cardsToProcess.length; i += CONCURRENCY) {
+        const batch = cardsToProcess.slice(i, i + CONCURRENCY);
         const results = await Promise.all(
           batch.map(async (card: any) => {
-            const commentsRes = await fetch(
-              `${TRELLO_BASE}/cards/${card.id}/actions?filter=commentCard&${auth}`
-            );
+            const commentsRes = await fetch(`${TRELLO_BASE}/cards/${card.id}/actions?filter=commentCard&${auth}`);
             const commentsData = await commentsRes.json();
             const comments = Array.isArray(commentsData)
-              ? commentsData.map((a: any) => ({
-                  text: a.data?.text ?? "",
-                  date: a.date,
-                  authorName: a.memberCreator?.fullName ?? "",
-                }))
+              ? commentsData.map((a: any) => ({ text: a.data?.text ?? "", date: a.date, authorName: a.memberCreator?.fullName ?? "" }))
               : [];
             return {
               card_id: card.id,

@@ -22,7 +22,8 @@ export default function AdminKnowledgePage() {
   const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
 
   const loadDocs = async () => {
-    const { data } = await supabase.from('knowledge_docs').select('*').order('created_at', { ascending: false })
+    const { data: { user } } = await supabase.auth.getUser()
+    const { data } = await supabase.from('knowledge_docs').select('*').eq('user_id', user?.id).order('created_at', { ascending: false })
     setDocs(data ?? [])
   }
 
@@ -39,7 +40,7 @@ export default function AdminKnowledgePage() {
       const { data: { user } } = await supabase.auth.getUser()
       const { data: doc, error: docErr } = await supabase.from('knowledge_docs').insert({
         title, area, tags, file_path: path, file_name: file.name,
-        status: 'active', visibility: 'public', uploaded_by: user?.id,
+        status: 'active', visibility: 'public', uploaded_by: user?.id, user_id: user?.id,
       }).select().single()
 
       if (docErr || !doc) throw docErr
@@ -93,7 +94,7 @@ export default function AdminKnowledgePage() {
 
   return (
     <div className="p-6 max-w-4xl space-y-6">
-      <h1 className="text-2xl font-bold text-[#f8fafc]">Admin — Knowledge Base</h1>
+      <h1 className="text-2xl font-bold text-[#f8fafc]">Mis documentos</h1>
 
       <div className="bg-[#1e293b] border border-[#334155] rounded-lg p-4 space-y-4">
         <h2 className="text-[#f8fafc] font-semibold">Subir documento</h2>
