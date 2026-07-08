@@ -21,7 +21,7 @@ Deno.serve(async (req) => {
     ].filter(Boolean).join("\n\n") : "";
 
     const prompt = `Sos un QA Manual Senior especializado en el dominio de turismo y booking.
-Dado el siguiente caso de testing, generá un checklist estructurado en texto plano con EXACTAMENTE este formato:
+Dado el siguiente caso de testing, generá un checklist completo y exhaustivo en texto plano con EXACTAMENTE este formato:
 
 ## CHECKLIST FUNCIONAL
 (un caso por línea, sin viñetas)
@@ -33,12 +33,10 @@ Dado el siguiente caso de testing, generá un checklist estructurado en texto pl
 (un caso por línea, sin viñetas)
 
 Tarea: ${title}
-${description ? `Descripción adicional: ${description}` : ""}
+${description ? `Descripción: ${description}` : ""}
 ${cardContextBlock ? `\n${cardContextBlock}` : ""}
 
-IMPORTANTE: Generá SOLO los casos de prueba necesarios según el alcance real de la tarea.
-Si los criterios de aceptación son específicos, basate en ellos — no agregues casos genéricos que no apliquen.
-Máximo 10 ítems por sección. Calidad sobre cantidad. Solo texto plano, sin Markdown decorativo.`;
+Usá toda la información disponible arriba para generar el checklist más completo posible. Cubrí todos los criterios de aceptación, comentarios y contexto. Generá entre 5 y 15 ítems por sección. Solo texto plano, sin Markdown decorativo.`;
 
     const geminiRes = await fetch(GEMINI_URL, {
       method: "POST",
