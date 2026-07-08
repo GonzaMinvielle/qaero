@@ -17,9 +17,12 @@ export default function HistoryPage() {
 
   useEffect(() => {
     const load = async () => {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) { setLoading(false); return }
       const { data } = await supabase
         .from('tasks')
         .select('*, trello_cards(card_name), checklist_items(*), task_notes(*)')
+        .eq('user_id', user.id)
         .eq('status', 'done')
         .order('updated_at', { ascending: false })
       setTasks(data ?? [])

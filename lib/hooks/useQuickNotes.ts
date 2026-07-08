@@ -18,9 +18,12 @@ export function useQuickNotes() {
 
   const fetchNotes = async () => {
     setLoading(true)
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) { setLoading(false); return }
     const { data } = await supabase
       .from('quick_notes')
       .select('*')
+      .eq('user_id', user.id)
       .order('created_at', { ascending: false })
     setNotes(data ?? [])
     setLoading(false)

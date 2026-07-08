@@ -25,10 +25,14 @@ export function useTasks(filter?: { status?: string; trelloList?: string }) {
   const fetchTasks = async () => {
     setLoading(true)
 
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) { setLoading(false); return }
+
     if (filter?.trelloList && filter.trelloList !== 'all') {
       const { data: cards } = await supabase
         .from('trello_cards')
         .select('card_id')
+        .eq('user_id', user.id)
         .ilike('list_name', `%${filter.trelloList}%`)
 
       const cardIds = (cards ?? []).map((c: any) => c.card_id)
@@ -36,6 +40,7 @@ export function useTasks(filter?: { status?: string; trelloList?: string }) {
       let query = supabase
         .from('tasks')
         .select('*, trello_cards(card_name), checklist_items(id, status)')
+        .eq('user_id', user.id)
         .in('trello_card_id', cardIds.length > 0 ? cardIds : ['__no_match__'])
         .order('updated_at', { ascending: false })
 
@@ -52,6 +57,7 @@ export function useTasks(filter?: { status?: string; trelloList?: string }) {
     let query = supabase
       .from('tasks')
       .select('*, trello_cards(card_name), checklist_items(id, status)')
+      .eq('user_id', user.id)
       .order('updated_at', { ascending: false })
 
     if (filter?.status && filter.status !== 'all') {
