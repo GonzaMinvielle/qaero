@@ -18,6 +18,7 @@ export default function NewTaskPage() {
   const [description, setDescription] = useState('')
   const [trelloCardId, setTrelloCardId] = useState('')
   const [trelloCards, setTrelloCards] = useState<any[]>([])
+  const [selectedCard, setSelectedCard] = useState<any>(null)
   const [checklist, setChecklist] = useState<ChecklistItem[]>([])
   const [generating, setGenerating] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -30,7 +31,7 @@ export default function NewTaskPage() {
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (!user) return
       supabase.from('trello_cards')
-        .select('card_id, card_name, list_name')
+        .select('card_id, card_name, list_name, description, labels, comments')
         .eq('user_id', user.id)
         .ilike('list_name', '%testing%')
         .order('synced_at', { ascending: false })
@@ -44,6 +45,9 @@ export default function NewTaskPage() {
     const card = trelloCards.find(c => c.card_id === cardId)
     if (card) {
       setTitle(card.card_name)
+      setSelectedCard(card)
+    } else {
+      setSelectedCard(null)
     }
   }
 
@@ -57,7 +61,15 @@ export default function NewTaskPage() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`,
         },
-        body: JSON.stringify({ title, description }),
+        body: JSON.stringify({
+          title,
+          description,
+          card_context: selectedCard ? {
+            description: selectedCard.description,
+            labels: (selectedCard.labels ?? []).map((l: any) => l.name || l).filter(Boolean),
+            comments: (selectedCard.comments ?? []).map((c: any) => c.text).filter(Boolean),
+          } : undefined,
+        }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Error generando checklist')
