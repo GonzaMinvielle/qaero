@@ -15,57 +15,55 @@ Deno.serve(async (req) => {
     const { title, description, card_context } = await req.json();
 
     const cardContextBlock = card_context ? [
-      card_context.description ? `Descripción / criterios de aceptación:\n${card_context.description}` : "",
+      card_context.description ? `Criterios de aceptación / descripción:\n${card_context.description}` : "",
       card_context.labels?.length ? `Labels: ${card_context.labels.join(", ")}` : "",
-      card_context.comments?.length ? `Comentarios de la tarjeta:\n${card_context.comments.join("\n")}` : "",
+      card_context.comments?.length ? `Comentarios:\n${card_context.comments.join("\n")}` : "",
     ].filter(Boolean).join("\n\n") : "";
 
     const prompt = `Sos un QA Manual Senior especializado en el dominio de turismo y booking.
-Dado el siguiente caso de testing, generá un checklist completo y exhaustivo en texto plano con EXACTAMENTE este formato:
+Generá un checklist de testing exhaustivo basado en toda la información disponible de la tarea.
+Devolvé ÚNICAMENTE un JSON válido con exactamente tres arrays:
+- "checklist": casos de prueba funcionales (uno por criterio de aceptación si los hay)
+- "edge_cases": escenarios límite y casos no felices relevantes
+- "risks": puntos técnicos o de negocio que podrían fallar
 
-## CHECKLIST FUNCIONAL
-(un caso por línea, sin viñetas)
-
-## EDGE CASES
-(un caso por línea, sin viñetas)
-
-## RIESGOS / PUNTOS SENSIBLES
-(un caso por línea, sin viñetas)
+Cubrí todos los criterios de aceptación disponibles. No agregues casos genéricos que no apliquen al contexto real.
 
 Tarea: ${title}
-${description ? `Descripción: ${description}` : ""}
-${cardContextBlock ? `\n${cardContextBlock}` : ""}
-
-Usá toda la información disponible arriba para generar el checklist más completo posible. Cubrí todos los criterios de aceptación, comentarios y contexto. Generá entre 5 y 15 ítems por sección. Solo texto plano, sin Markdown decorativo.`;
+${description ? `Descripción adicional: ${description}` : ""}
+${cardContextBlock ? `\n${cardContextBlock}` : ""}`;
 
     const geminiRes = await fetch(GEMINI_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0.4, maxOutputTokens: 8192, thinkingConfig: { thinkingBudget: 0 } },
+        generationConfig: {
+          temperature: 0.4,
+          maxOutputTokens: 8192,
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: "object",
+            properties: {
+              checklist:  { type: "array", items: { type: "string" } },
+              edge_cases: { type: "array", items: { type: "string" } },
+              risks:      { type: "array", items: { type: "string" } },
+            },
+            required: ["checklist", "edge_cases", "risks"],
+          },
+        },
       }),
     });
 
     const geminiData = await geminiRes.json();
-    const text = geminiData.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+    const text = geminiData.candidates?.[0]?.content?.parts?.[0]?.text ?? "{}";
+    const parsed = JSON.parse(text);
 
-    const parseSection = (sectionHeader: string, nextHeader: string | null, raw: string): string[] => {
-      const startIdx = raw.indexOf(sectionHeader);
-      if (startIdx === -1) return [];
-      const start = startIdx + sectionHeader.length;
-      const end = nextHeader ? raw.indexOf(nextHeader, start) : raw.length;
-      const section = raw.slice(start, end === -1 ? raw.length : end);
-      return section.split("\n")
-        .map(l => l.replace(/^[-*•]\s*/, "").trim())
-        .filter(l => l.length > 3 && !l.startsWith("#"));
-    };
-
-    const checklist = parseSection("## CHECKLIST FUNCIONAL", "## EDGE CASES", text);
-    const edge_cases = parseSection("## EDGE CASES", "## RIESGOS", text);
-    const risks = parseSection("## RIESGOS / PUNTOS SENSIBLES", null, text);
-
-    return new Response(JSON.stringify({ checklist, edge_cases, risks }), {
+    return new Response(JSON.stringify({
+      checklist:  Array.isArray(parsed.checklist)  ? parsed.checklist  : [],
+      edge_cases: Array.isArray(parsed.edge_cases) ? parsed.edge_cases : [],
+      risks:      Array.isArray(parsed.risks)      ? parsed.risks      : [],
+    }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e: any) {
