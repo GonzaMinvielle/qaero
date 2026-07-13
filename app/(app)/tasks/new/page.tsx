@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { toast } from 'sonner'
-import { Loader2, Sparkles } from 'lucide-react'
+import { Loader2, Sparkles, RefreshCw } from 'lucide-react'
 
 type ChecklistItem = { text: string; type: 'functional' | 'edge_case' | 'risk' }
 
@@ -22,23 +22,48 @@ export default function NewTaskPage() {
   const [checklist, setChecklist] = useState<ChecklistItem[]>([])
   const [generating, setGenerating] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [supabaseUrl, setSupabaseUrl] = useState('')
+  const [syncingTesting, setSyncingTesting] = useState(false)
+  const [supabaseUrl] = useState(process.env.NEXT_PUBLIC_SUPABASE_URL!)
   const router = useRouter()
   const supabase = createClient()
 
+  const loadTrelloCards = async () => {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+    const { data } = await supabase.from('trello_cards')
+      .select('card_id, card_name, list_name, description, labels, comments')
+      .eq('user_id', user.id)
+      .ilike('list_name', '%testing%')
+      .order('synced_at', { ascending: false })
+      .limit(100)
+    setTrelloCards(data ?? [])
+  }
+
   useEffect(() => {
-    setSupabaseUrl(process.env.NEXT_PUBLIC_SUPABASE_URL!)
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      if (!user) return
-      supabase.from('trello_cards')
-        .select('card_id, card_name, list_name, description, labels, comments')
-        .eq('user_id', user.id)
-        .ilike('list_name', '%testing%')
-        .order('synced_at', { ascending: false })
-        .limit(100)
-        .then(({ data }) => setTrelloCards(data ?? []))
-    })
+    loadTrelloCards()
   }, [])
+
+  const syncTesting = async () => {
+    setSyncingTesting(true)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const res = await fetch(`${supabaseUrl}/functions/v1/trello-api`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` },
+        body: JSON.stringify({ action: 'sync-testing' }),
+      })
+      const result = await res.json()
+      if (result.success) {
+        toast.success(`${result.count} tarjetas de Testing actualizadas`)
+        await loadTrelloCards()
+      } else {
+        toast.error(result.error || 'Error sincronizando Testing')
+      }
+    } catch (e: any) {
+      toast.error(e.message)
+    }
+    setSyncingTesting(false)
+  }
 
   const handleTrelloSelect = (cardId: string) => {
     setTrelloCardId(cardId)
@@ -125,23 +150,32 @@ export default function NewTaskPage() {
       <h1 className="text-2xl font-bold text-[#f8fafc]">Nueva tarea</h1>
 
       <div className="space-y-4 bg-[#1e293b] border border-[#334155] rounded-lg p-4">
-        {trelloCards.length > 0 && (
-          <div>
-            <label className="text-sm text-[#94a3b8] mb-1 block">Tarjeta Trello (opcional)</label>
-            <select
-              value={trelloCardId}
-              onChange={e => handleTrelloSelect(e.target.value)}
-              className="w-full bg-[#0f172a] border border-[#334155] text-[#f8fafc] rounded-md px-3 py-2 text-sm"
+        <div>
+          <div className="flex items-center justify-between mb-1">
+            <label className="text-sm text-[#94a3b8]">Tarjeta Trello (opcional)</label>
+            <button
+              type="button"
+              onClick={syncTesting}
+              disabled={syncingTesting}
+              className="flex items-center gap-1 text-xs text-[#94a3b8] hover:text-[#f8fafc] transition-colors disabled:opacity-50"
             >
-              <option value="">— Sin tarjeta Trello —</option>
-              {trelloCards.map(c => (
-                <option key={c.card_id} value={c.card_id}>
-                  [{c.list_name}] {c.card_name}
-                </option>
-              ))}
-            </select>
+              <RefreshCw size={12} className={syncingTesting ? 'animate-spin' : ''} />
+              {syncingTesting ? 'Sincronizando...' : 'Actualizar Testing'}
+            </button>
           </div>
-        )}
+          <select
+            value={trelloCardId}
+            onChange={e => handleTrelloSelect(e.target.value)}
+            className="w-full bg-[#0f172a] border border-[#334155] text-[#f8fafc] rounded-md px-3 py-2 text-sm"
+          >
+            <option value="">— Sin tarjeta Trello —</option>
+            {trelloCards.map(c => (
+              <option key={c.card_id} value={c.card_id}>
+                [{c.list_name}] {c.card_name}
+              </option>
+            ))}
+          </select>
+        </div>
 
         <div>
           <label className="text-sm text-[#94a3b8] mb-1 block">Título *</label>

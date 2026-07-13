@@ -122,13 +122,10 @@ Deno.serve(async (req) => {
         return new Response(JSON.stringify({ error: "No autorizado" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
-      // Obtener todos los boards que el usuario tiene sincronizados
-      const { data: userCards } = await serviceClient
-        .from("trello_cards")
-        .select("board_id, board_name")
-        .eq("user_id", user.id);
-
-      const uniqueBoards = [...new Map((userCards ?? []).map((r: any) => [r.board_id, r])).values()] as any[];
+      // Obtener boards directamente desde Trello (no depende de la DB)
+      const boardsRes = await fetch(`${TRELLO_BASE}/members/me/boards?fields=id,name,closed&${auth}`);
+      const allBoards = await boardsRes.json();
+      const uniqueBoards = Array.isArray(allBoards) ? allBoards.filter((b: any) => !b.closed).map((b: any) => ({ board_id: b.id, board_name: b.name })) : [];
 
       const synced_at = new Date().toISOString();
       let totalCount = 0;
