@@ -44,6 +44,11 @@ Deno.serve(async (req) => {
     if (!boardMap.has(key)) boardMap.set(key, row);
   }
 
+  // Usernames de Trello de todos los usuarios involucrados, para filtrar por asignación
+  const userIds = [...new Set([...boardMap.values()].map((b) => b.user_id))];
+  const { data: profiles } = await serviceClient.from("profiles").select("id, trello_username").in("id", userIds);
+  const usernameByUserId = new Map((profiles ?? []).map((p: any) => [p.id, p.trello_username?.trim().toLowerCase() || null]));
+
   const results: any[] = [];
 
   for (const { user_id, board_id, board_name, synced_at: lastSync } of boardMap.values()) {
@@ -69,10 +74,10 @@ Deno.serve(async (req) => {
       const lists = await listsRes.json();
       const listMap = Object.fromEntries((Array.isArray(lists) ? lists : []).map((l: any) => [l.id, l.name]));
 
-      // Obtener estado actual de cada tarjeta
+      // Obtener estado actual de cada tarjeta (incluye asignados)
       const cardResults = await Promise.all(
         changedCardIds.map(async (cardId) => {
-          const res = await fetch(`${TRELLO_BASE}/cards/${cardId}?fields=id,name,desc,idList,labels,dateLastActivity,closed&${auth}`);
+          const res = await fetch(`${TRELLO_BASE}/cards/${cardId}?fields=id,name,desc,idList,labels,dateLastActivity,closed&members=true&member_fields=username&${auth}`);
           return res.json();
         })
       );
@@ -80,11 +85,13 @@ Deno.serve(async (req) => {
       const synced_at = new Date().toISOString();
       const toUpsert: any[] = [];
       const toDelete: string[] = [];
+      const trelloUsername = usernameByUserId.get(user_id);
 
       for (const card of cardResults) {
         if (!card.id) continue;
-        if (card.closed) {
-          // Tarjeta archivada en Trello → eliminar de nuestra DB
+        const isAssignedToUser = Array.isArray(card.members) && card.members.some((m: any) => m.username?.toLowerCase() === trelloUsername);
+        if (card.closed || !trelloUsername || !isAssignedToUser) {
+          // Tarjeta archivada, o ya no asignada a este usuario → eliminar de nuestra DB
           toDelete.push(card.id);
           continue;
         }

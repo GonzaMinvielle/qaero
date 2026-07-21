@@ -68,17 +68,34 @@ Deno.serve(async (req) => {
 
       const { board_id, board_name } = params;
 
+      const { data: profile } = await serviceClient.from("profiles").select("trello_username").eq("id", user.id).single();
+      const trelloUsername = profile?.trello_username?.trim().toLowerCase();
+      if (!trelloUsername) {
+        return new Response(JSON.stringify({ error: "Tu usuario de Trello no está configurado. Pedile al admin que lo cargue en Admin → Usuarios." }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
       // FULL SYNC siempre — el cron maneja el incremental
       const [cardsRes, listsRes] = await Promise.all([
-        fetch(`${TRELLO_BASE}/boards/${board_id}/cards?fields=id,name,desc,idList,labels,dateLastActivity&filter=open&${auth}`),
+        fetch(`${TRELLO_BASE}/boards/${board_id}/cards?fields=id,name,desc,idList,labels,dateLastActivity&filter=open&members=true&member_fields=username&${auth}`),
         fetch(`${TRELLO_BASE}/boards/${board_id}/lists?fields=id,name&${auth}`),
       ]);
       const lists = await listsRes.json();
       const listMap = Object.fromEntries((Array.isArray(lists) ? lists : []).map((l: any) => [l.id, l.name]));
       const synced_at = new Date().toISOString();
 
-      const cards = await cardsRes.json();
-      if (!Array.isArray(cards)) throw new Error("Error obteniendo tarjetas de Trello");
+      const allCards = await cardsRes.json();
+      if (!Array.isArray(allCards)) throw new Error("Error obteniendo tarjetas de Trello");
+
+      // Sólo tarjetas donde el usuario está asignado en Trello
+      const cards = allCards.filter((card: any) =>
+        Array.isArray(card.members) && card.members.some((m: any) => m.username?.toLowerCase() === trelloUsername)
+      );
+
+      // Limpiar tarjetas de este board que quedaron sincronizadas antes y ya no corresponden
+      const notAssignedIds = allCards.filter((card: any) => !cards.includes(card)).map((card: any) => card.id);
+      if (notAssignedIds.length > 0) {
+        await serviceClient.from("trello_cards").delete().eq("user_id", user.id).eq("board_id", board_id).in("card_id", notAssignedIds);
+      }
 
       const CONCURRENCY = 10;
       const rows: any[] = [];
