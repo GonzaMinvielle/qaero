@@ -18,10 +18,18 @@ export default function LoginPage() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password })
     if (error) {
       toast.error(error.message)
     } else {
+      // Primer login tras el registro: copiar el username de Trello del metadata a profiles
+      const trelloUsername = data.user?.user_metadata?.trello_username?.trim()
+      if (trelloUsername) {
+        const { data: profile } = await supabase.from('profiles').select('trello_username').eq('id', data.user!.id).single()
+        if (!profile?.trello_username) {
+          await supabase.from('profiles').update({ trello_username: trelloUsername }).eq('id', data.user!.id)
+        }
+      }
       router.push('/dashboard')
       router.refresh()
     }

@@ -8,21 +8,35 @@ import { Input } from '@/components/ui/input'
 import { toast } from 'sonner'
 import Link from 'next/link'
 
+const ALLOWED_DOMAINS = ['aerolaplata.com.ar', 'aero.tur.ar']
+
+const isCompanyEmail = (value: string) => {
+  const domain = value.split('@')[1]?.toLowerCase().trim()
+  return !!domain && ALLOWED_DOMAINS.includes(domain)
+}
+
 export default function RegisterPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [fullName, setFullName] = useState('')
+  const [trelloUsername, setTrelloUsername] = useState('')
   const [loading, setLoading] = useState(false)
   const router = useRouter()
   const supabase = createClient()
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault()
+
+    if (!isCompanyEmail(email)) {
+      toast.error('El email tiene que ser de la empresa (@aerolaplata.com.ar o @aero.tur.ar)')
+      return
+    }
+
     setLoading(true)
     const { error } = await supabase.auth.signUp({
       email,
       password,
-      options: { data: { full_name: fullName } },
+      options: { data: { full_name: fullName, trello_username: trelloUsername.trim() } },
     })
     if (error) {
       toast.error(error.message)
@@ -51,9 +65,17 @@ export default function RegisterPage() {
           />
           <Input
             type="email"
-            placeholder="Email"
+            placeholder="Email (@aerolaplata.com.ar o @aero.tur.ar)"
             value={email}
             onChange={e => setEmail(e.target.value)}
+            required
+            className="bg-[#0f172a] border-[#334155] text-[#f8fafc] placeholder:text-[#94a3b8]"
+          />
+          <Input
+            type="text"
+            placeholder="Username de Trello"
+            value={trelloUsername}
+            onChange={e => setTrelloUsername(e.target.value)}
             required
             className="bg-[#0f172a] border-[#334155] text-[#f8fafc] placeholder:text-[#94a3b8]"
           />
