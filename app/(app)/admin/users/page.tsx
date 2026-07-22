@@ -45,9 +45,11 @@ export default function AdminUsersPage() {
 
   const saveTrelloUsername = async (userId: string, trelloUsername: string) => {
     const value = trelloUsername.trim() || null
-    const { error } = await supabase.from('profiles').update({ trello_username: value }).eq('id', userId)
-    if (error) {
-      toast.error('Error guardando el username de Trello')
+    const { data, error } = await supabase.from('profiles').update({ trello_username: value }).eq('id', userId).select()
+    // Si RLS bloquea el update de la fila de otro usuario, Supabase no devuelve `error` —
+    // simplemente afecta 0 filas. Hay que chequear `data` explícitamente para detectarlo.
+    if (error || !data || data.length === 0) {
+      toast.error('No se pudo guardar el username (permisos insuficientes)')
       return
     }
     setUsers(prev => prev.map(u => u.id === userId ? { ...u, trello_username: value } : u))
@@ -83,6 +85,7 @@ export default function AdminUsersPage() {
                   <div className="flex flex-col gap-1 flex-1 min-w-[9rem] sm:flex-none sm:w-36">
                     <label className="text-[#64748b] text-[10px] leading-none">Username Trello</label>
                     <Input
+                      key={user.trello_username ?? 'empty'}
                       defaultValue={user.trello_username ?? ''}
                       placeholder="username"
                       className="bg-[#0f172a] border-[#334155] text-[#f8fafc] w-full"

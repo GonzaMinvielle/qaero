@@ -39,7 +39,8 @@ export default function TrelloPage() {
     setSyncing(boardId)
     const result = await call('sync-board', { board_id: boardId, board_name: boardName })
     if (result.success) {
-      toast.success(`${result.count} tarjetas sincronizadas de "${boardName}"`)
+      console.log('sync-board debug:', result)
+      toast.success(`${result.count} tarjetas sincronizadas de "${boardName}" (${result.deletedCount ?? 0} viejas borradas de ${result.notAssignedCount ?? 0} no asignadas)`)
     } else {
       toast.error(result.error || 'Error sincronizando')
     }

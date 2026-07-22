@@ -45,7 +45,8 @@ export default function TasksPage() {
       })
       const result = await res.json()
       if (result.success) {
-        toast.success(`${result.count} tarjetas de Testing actualizadas`)
+        console.log('sync-testing debug:', result.debug)
+        toast.success(`${result.count} tuyas de ${result.scanned} encontradas en Testing`)
         refresh()
       } else {
         toast.error(result.error || 'Error actualizando Testing')

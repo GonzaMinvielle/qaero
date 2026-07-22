@@ -92,9 +92,22 @@ Deno.serve(async (req) => {
       );
 
       // Limpiar tarjetas de este board que quedaron sincronizadas antes y ya no corresponden
+      // Se borra directo por (user_id, board_id) — no hace falta el .in(card_id) para esto,
+      // y evita mandar URLs gigantes con miles de IDs (eso hacía que el delete fallara en boards grandes)
       const notAssignedIds = allCards.filter((card: any) => !cards.includes(card)).map((card: any) => card.id);
-      if (notAssignedIds.length > 0) {
-        await serviceClient.from("trello_cards").delete().eq("user_id", user.id).eq("board_id", board_id).in("card_id", notAssignedIds);
+      const assignedIds = cards.map((c: any) => c.id);
+      let deleteError: string | null = null;
+      let deletedCount: number | null = null;
+      {
+        let query = serviceClient
+          .from("trello_cards")
+          .delete({ count: "exact" })
+          .eq("user_id", user.id)
+          .eq("board_id", board_id);
+        query = assignedIds.length > 0 ? query.not("card_id", "in", `(${assignedIds.join(",")})`) : query;
+        const res = await query;
+        deletedCount = res.count;
+        if (res.error) deleteError = res.error.message;
       }
 
       const CONCURRENCY = 10;
@@ -122,7 +135,10 @@ Deno.serve(async (req) => {
 
       await serviceClient.from("trello_cards").upsert(rows, { onConflict: "card_id,user_id" });
 
-      return new Response(JSON.stringify({ success: true, count: rows.length, mode: "full" }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      return new Response(JSON.stringify({
+        success: true, count: rows.length, mode: "full",
+        totalScanned: allCards.length, notAssignedCount: notAssignedIds.length, deletedCount, deleteError,
+      }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     if (action === "sync-testing") {
@@ -145,15 +161,40 @@ Deno.serve(async (req) => {
         return new Response(JSON.stringify({ error: "Tu usuario de Trello no está configurado. Pedile al admin que lo cargue en Admin → Usuarios." }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
-      // Obtener boards directamente desde Trello (no depende de la DB)
-      const boardsRes = await fetch(`${TRELLO_BASE}/members/me/boards?fields=id,name,closed&${auth}`);
-      const allBoards = await boardsRes.json();
-      const uniqueBoards = Array.isArray(allBoards) ? allBoards.filter((b: any) => !b.closed).map((b: any) => ({ board_id: b.id, board_name: b.name })) : [];
+      // Sólo los boards que el usuario ya eligió y sincronizó en "Mi Trello" — no se escanean todos los boards de Trello
+      const { data: syncedBoards } = await serviceClient
+        .from("trello_cards")
+        .select("board_id, board_name")
+        .eq("user_id", user.id);
+      const uniqueBoards = Array.from(
+        new Map((syncedBoards ?? []).map((b: any) => [b.board_id, { board_id: b.board_id, board_name: b.board_name }])).values()
+      );
+
+      if (uniqueBoards.length === 0) {
+        return new Response(JSON.stringify({ error: "Todavía no sincronizaste ningún board en 'Mi Trello'. Sincronizá uno primero." }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
 
       const synced_at = new Date().toISOString();
       let totalCount = 0;
+      let totalScanned = 0;
+      const debug: any[] = [];
 
       for (const { board_id, board_name } of uniqueBoards) {
+        // Limpieza a nivel de TODO el board (no sólo la lista Testing) — cubre tarjetas viejas
+        // sincronizadas antes del fix de asignación, sin tener que ir board por board a "Mi Trello"
+        const boardCardsRes = await fetch(
+          `${TRELLO_BASE}/boards/${board_id}/cards?fields=id&filter=open&members=true&member_fields=username&${auth}`
+        );
+        const boardCards = await boardCardsRes.json();
+        if (Array.isArray(boardCards)) {
+          const assignedBoardIds = boardCards
+            .filter((c: any) => Array.isArray(c.members) && c.members.some((m: any) => m.username?.toLowerCase() === trelloUsername))
+            .map((c: any) => c.id);
+          let cleanupQuery = serviceClient.from("trello_cards").delete({ count: "exact" }).eq("user_id", user.id).eq("board_id", board_id);
+          cleanupQuery = assignedBoardIds.length > 0 ? cleanupQuery.not("card_id", "in", `(${assignedBoardIds.join(",")})`) : cleanupQuery;
+          await cleanupQuery;
+        }
+
         const listsRes = await fetch(`${TRELLO_BASE}/boards/${board_id}/lists?fields=id,name&${auth}`);
         const lists = await listsRes.json();
         const testingLists = Array.isArray(lists)
@@ -166,18 +207,41 @@ Deno.serve(async (req) => {
           );
           const allCards = await cardsRes.json();
           if (!Array.isArray(allCards)) continue;
+          totalScanned += allCards.length;
 
           // Sólo tarjetas donde el usuario está asignado en Trello — evita mezclar tarjetas de otros testers
           const cards = allCards.filter((card: any) =>
             Array.isArray(card.members) && card.members.some((m: any) => m.username?.toLowerCase() === trelloUsername)
           );
 
-          // Limpiar tarjetas que quedaron mal sincronizadas antes de este fix (no asignadas a este usuario)
+          const debugEntry: any = {
+            board_name, list_name: list.name,
+            trelloUsername,
+            totalCards: allCards.length,
+            matchedCards: cards.length,
+            sampleMembers: allCards.slice(0, 5).map((c: any) => ({
+              card_name: c.name,
+              members: Array.isArray(c.members) ? c.members.map((m: any) => m.username) : c.members,
+            })),
+          };
+          debug.push(debugEntry);
+
+          // Limpiar tarjetas que quedaron mal sincronizadas antes de este fix (no asignadas a este usuario).
+          // Acá SÍ se puede usar .in() directo porque una lista puntual es chica (a diferencia del board completo en sync-board) —
+          // y hace falta acotar por card_id específicamente, porque el board puede tener otra lista "testing" ya sincronizada antes en este mismo request.
           const notAssignedIds = allCards
             .filter((card: any) => !cards.includes(card))
             .map((card: any) => card.id);
           if (notAssignedIds.length > 0) {
-            await serviceClient.from("trello_cards").delete().eq("user_id", user.id).eq("board_id", board_id).in("card_id", notAssignedIds);
+            const res = await serviceClient
+              .from("trello_cards")
+              .delete({ count: "exact" })
+              .eq("user_id", user.id)
+              .eq("board_id", board_id)
+              .in("card_id", notAssignedIds);
+            debugEntry.notAssignedIds = notAssignedIds.length;
+            debugEntry.deletedCount = res.count;
+            if (res.error) debugEntry.deleteError = res.error.message;
           }
 
           if (cards.length === 0) continue;
@@ -212,7 +276,7 @@ Deno.serve(async (req) => {
         }
       }
 
-      return new Response(JSON.stringify({ success: true, count: totalCount }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      return new Response(JSON.stringify({ success: true, count: totalCount, scanned: totalScanned, debug }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     return new Response(JSON.stringify({ error: "Acción desconocida" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });

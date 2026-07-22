@@ -54,7 +54,8 @@ export default function NewTaskPage() {
       })
       const result = await res.json()
       if (result.success) {
-        toast.success(`${result.count} tarjetas de Testing actualizadas`)
+        console.log('sync-testing debug:', result.debug)
+        toast.success(`${result.count} tuyas de ${result.scanned} encontradas en Testing`)
         await loadTrelloCards()
       } else {
         toast.error(result.error || 'Error sincronizando Testing')
