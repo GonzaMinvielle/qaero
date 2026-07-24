@@ -27,6 +27,23 @@ Deno.serve(async (req) => {
     const token = configMap["trello_token"];
 
     if (action === "set-config") {
+      if (!authHeader) {
+        return new Response(JSON.stringify({ error: "No autorizado" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+      const userClient = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        Deno.env.get("SUPABASE_ANON_KEY")!,
+        { global: { headers: { Authorization: authHeader } } }
+      );
+      const { data: { user } } = await userClient.auth.getUser();
+      if (!user) {
+        return new Response(JSON.stringify({ error: "No autorizado" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+      const { data: roleRow } = await serviceClient.from("user_roles").select("role").eq("user_id", user.id).single();
+      if (roleRow?.role !== "admin") {
+        return new Response(JSON.stringify({ error: "Sólo un admin puede configurar Trello" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
       const { trello_api_key, trello_token } = params;
       await serviceClient.from("app_config").upsert([
         { key: "trello_api_key", value: trello_api_key, updated_at: new Date().toISOString() },
@@ -46,6 +63,18 @@ Deno.serve(async (req) => {
     const auth = `key=${apiKey}&token=${token}`;
 
     if (action === "list-boards") {
+      if (!authHeader) {
+        return new Response(JSON.stringify({ error: "No autorizado" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+      const userClient = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        Deno.env.get("SUPABASE_ANON_KEY")!,
+        { global: { headers: { Authorization: authHeader } } }
+      );
+      const { data: { user } } = await userClient.auth.getUser();
+      if (!user) {
+        return new Response(JSON.stringify({ error: "No autorizado" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
       const res = await fetch(`${TRELLO_BASE}/members/me/boards?fields=name,url,closed&${auth}`);
       const boards = await res.json();
       const open = Array.isArray(boards) ? boards.filter((b: any) => !b.closed) : [];
@@ -161,11 +190,14 @@ Deno.serve(async (req) => {
         return new Response(JSON.stringify({ error: "Tu usuario de Trello no está configurado. Pedile al admin que lo cargue en Admin → Usuarios." }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
-      // Sólo los boards que el usuario ya eligió y sincronizó en "Mi Trello" — no se escanean todos los boards de Trello
+      // Sólo los boards que el usuario ya eligió y sincronizó en "Mi Trello" — no se escanean todos los boards de Trello.
+      // OJO: sin .limit() explícito, Supabase corta en 1000 filas por default — con miles de filas viejas
+      // acumuladas de sync anteriores, boards enteros pueden quedar afuera del escaneo sin que sea evidente.
       const { data: syncedBoards } = await serviceClient
         .from("trello_cards")
         .select("board_id, board_name")
-        .eq("user_id", user.id);
+        .eq("user_id", user.id)
+        .limit(20000);
       const uniqueBoards = Array.from(
         new Map((syncedBoards ?? []).map((b: any) => [b.board_id, { board_id: b.board_id, board_name: b.board_name }])).values()
       );

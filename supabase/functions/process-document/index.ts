@@ -51,7 +51,24 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   try {
-    const { bucket, filePath, fileName } = await req.json();
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) {
+      return new Response(JSON.stringify({ success: false, error: "No autorizado" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+    const userClient = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_ANON_KEY")!,
+      { global: { headers: { Authorization: authHeader } } }
+    );
+    const { data: { user } } = await userClient.auth.getUser();
+    if (!user) {
+      return new Response(JSON.stringify({ success: false, error: "No autorizado" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    const { filePath, fileName } = await req.json();
+    // Bucket fijo — no se toma del cliente, para que no se pueda usar esta función para
+    // leer archivos de otros buckets (ej. evidencias de tareas de otros usuarios)
+    const bucket = "knowledge-documents";
 
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,

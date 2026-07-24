@@ -31,11 +31,14 @@ Deno.serve(async (req) => {
 
   const auth = `key=${apiKey}&token=${token}`;
 
-  // Obtener todos los (user_id, board_id) únicos que hay sincronizados
+  // Obtener todos los (user_id, board_id) únicos que hay sincronizados.
+  // Sin .limit() explícito, Supabase corta en 1000 filas por default — con muchas filas
+  // acumuladas, boards enteros pueden quedar afuera del monitoreo del cron sin que sea evidente.
   const { data: existingCards } = await serviceClient
     .from("trello_cards")
     .select("user_id, board_id, board_name, synced_at")
-    .order("synced_at", { ascending: false });
+    .order("synced_at", { ascending: false })
+    .limit(20000);
 
   // Deduplicar — quedarse con el synced_at más reciente por (user_id, board_id)
   const boardMap = new Map<string, { user_id: string; board_id: string; board_name: string; synced_at: string }>();
