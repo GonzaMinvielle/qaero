@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
-import { Plus, Trash2, RefreshCw } from 'lucide-react'
+import { Plus, Trash2 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
 
@@ -29,33 +29,8 @@ export default function TasksPage() {
   const [trelloListFilter, setTrelloListFilter] = useState('Testing')
   const [search, setSearch] = useState('')
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
-  const [syncingTesting, setSyncingTesting] = useState(false)
   const { tasks, loading, refresh } = useTasks({ status: statusFilter, trelloList: trelloListFilter })
   const supabase = createClient()
-  const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
-
-  const syncTesting = async () => {
-    setSyncingTesting(true)
-    try {
-      const { data: { session } } = await supabase.auth.getSession()
-      const res = await fetch(`${SUPABASE_URL}/functions/v1/trello-api`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` },
-        body: JSON.stringify({ action: 'sync-testing' }),
-      })
-      const result = await res.json()
-      if (result.success) {
-        console.log('sync-testing debug:', result.debug)
-        toast.success(`${result.count} tuyas de ${result.scanned} encontradas en Testing`)
-        refresh()
-      } else {
-        toast.error(result.error || 'Error actualizando Testing')
-      }
-    } catch (e: any) {
-      toast.error(e.message)
-    }
-    setSyncingTesting(false)
-  }
 
   const deleteTask = async (taskId: string, e: React.MouseEvent) => {
     e.preventDefault()
@@ -75,15 +50,6 @@ export default function TasksPage() {
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-[#f8fafc]">Tareas</h1>
         <div className="flex gap-2">
-          <Button
-            onClick={syncTesting}
-            disabled={syncingTesting}
-            variant="ghost"
-            className="border border-[#334155] text-[#94a3b8] hover:text-[#f8fafc] gap-2"
-          >
-            {syncingTesting ? <RefreshCw size={14} className="animate-spin" /> : <RefreshCw size={14} />}
-            Actualizar Testing
-          </Button>
           <Link href="/tasks/new">
             <Button className="bg-[#0d9488] hover:bg-[#0f766e] text-white gap-2">
               <Plus size={16} /> Nueva tarea

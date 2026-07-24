@@ -226,20 +226,20 @@ Deno.serve(async (req) => {
           };
           debug.push(debugEntry);
 
-          // Limpiar tarjetas que quedaron mal sincronizadas antes de este fix (no asignadas a este usuario).
-          // Acá SÍ se puede usar .in() directo porque una lista puntual es chica (a diferencia del board completo en sync-board) —
-          // y hace falta acotar por card_id específicamente, porque el board puede tener otra lista "testing" ya sincronizada antes en este mismo request.
-          const notAssignedIds = allCards
-            .filter((card: any) => !cards.includes(card))
-            .map((card: any) => card.id);
-          if (notAssignedIds.length > 0) {
-            const res = await serviceClient
+          // Limpiar filas guardadas bajo esta lista que ya no correspondan — comparando contra lo que
+          // tenemos NOSOTROS guardado en trello_cards para (user, board, list_name), no contra el fetch
+          // de Trello. Esto cubre tanto "perdió la asignación" como "la tarjeta se movió/desapareció de
+          // esta lista" (en ese caso ni aparece en el fetch actual, así que compararla contra allCards no alcanza).
+          const assignedIds = cards.map((c: any) => c.id);
+          {
+            let cleanupQuery = serviceClient
               .from("trello_cards")
               .delete({ count: "exact" })
               .eq("user_id", user.id)
               .eq("board_id", board_id)
-              .in("card_id", notAssignedIds);
-            debugEntry.notAssignedIds = notAssignedIds.length;
+              .eq("list_name", list.name);
+            cleanupQuery = assignedIds.length > 0 ? cleanupQuery.not("card_id", "in", `(${assignedIds.join(",")})`) : cleanupQuery;
+            const res = await cleanupQuery;
             debugEntry.deletedCount = res.count;
             if (res.error) debugEntry.deleteError = res.error.message;
           }
