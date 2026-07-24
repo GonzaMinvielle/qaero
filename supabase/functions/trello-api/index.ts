@@ -243,7 +243,7 @@ Deno.serve(async (req) => {
         boardDebug.listsStatus = listsRes.status;
         boardDebug.allListNames = Array.isArray(lists) ? lists.map((l: any) => l.name) : lists;
         const testingLists = Array.isArray(lists)
-          ? lists.filter((l: any) => l.name.toLowerCase().includes("testing"))
+          ? lists.filter((l: any) => l.name.toLowerCase().includes("test"))
           : [];
         boardDebug.testingListNames = testingLists.map((l: any) => l.name);
 

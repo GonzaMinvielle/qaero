@@ -26,7 +26,7 @@ const statusColor: Record<string, string> = {
 
 export default function TasksPage() {
   const [statusFilter, setStatusFilter] = useState('all')
-  const [trelloListFilter, setTrelloListFilter] = useState('Testing')
+  const [trelloListFilter, setTrelloListFilter] = useState('Test')
   const [search, setSearch] = useState('')
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
   const { tasks, loading, refresh } = useTasks({ status: statusFilter, trelloList: trelloListFilter })
@@ -65,13 +65,13 @@ export default function TasksPage() {
           onChange={e => setSearch(e.target.value)}
           className="bg-[#1e293b] border-[#334155] text-[#f8fafc] placeholder:text-[#94a3b8]"
         />
-        <Select value={trelloListFilter} onValueChange={(v) => setTrelloListFilter(v ?? 'Testing')}>
+        <Select value={trelloListFilter} onValueChange={(v) => setTrelloListFilter(v ?? 'Test')}>
           <SelectTrigger className="bg-[#1e293b] border-[#334155] text-[#f8fafc] w-44">
             <SelectValue />
           </SelectTrigger>
           <SelectContent className="bg-[#1e293b] border-[#334155] text-[#f8fafc]">
             <SelectItem value="all">Todas las columnas</SelectItem>
-            <SelectItem value="Testing">Testing</SelectItem>
+            <SelectItem value="Test">Testing</SelectItem>
           </SelectContent>
         </Select>
         <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v ?? 'all')}>

@@ -33,7 +33,7 @@ export default function NewTaskPage() {
     const { data } = await supabase.from('trello_cards')
       .select('card_id, card_name, list_name, description, labels, comments')
       .eq('user_id', user.id)
-      .ilike('list_name', '%testing%')
+      .ilike('list_name', '%test%')
       .order('synced_at', { ascending: false })
       .limit(100)
     setTrelloCards(data ?? [])
