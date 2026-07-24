@@ -210,28 +210,42 @@ Deno.serve(async (req) => {
       let totalCount = 0;
       let totalScanned = 0;
       const debug: any[] = [];
+      const boardsScanned: any[] = [];
 
       for (const { board_id, board_name } of uniqueBoards) {
+        const boardDebug: any = { board_id, board_name };
+        boardsScanned.push(boardDebug);
+
         // Limpieza a nivel de TODO el board (no sólo la lista Testing) — cubre tarjetas viejas
         // sincronizadas antes del fix de asignación, sin tener que ir board por board a "Mi Trello"
         const boardCardsRes = await fetch(
           `${TRELLO_BASE}/boards/${board_id}/cards?fields=id&filter=open&members=true&member_fields=username&${auth}`
         );
         const boardCards = await boardCardsRes.json();
+        boardDebug.boardCardsStatus = boardCardsRes.status;
+        boardDebug.boardCardsIsArray = Array.isArray(boardCards);
+        boardDebug.boardCardsRaw = Array.isArray(boardCards) ? undefined : boardCards;
         if (Array.isArray(boardCards)) {
           const assignedBoardIds = boardCards
             .filter((c: any) => Array.isArray(c.members) && c.members.some((m: any) => m.username?.toLowerCase() === trelloUsername))
             .map((c: any) => c.id);
+          boardDebug.totalBoardCards = boardCards.length;
+          boardDebug.assignedOnBoard = assignedBoardIds.length;
           let cleanupQuery = serviceClient.from("trello_cards").delete({ count: "exact" }).eq("user_id", user.id).eq("board_id", board_id);
           cleanupQuery = assignedBoardIds.length > 0 ? cleanupQuery.not("card_id", "in", `(${assignedBoardIds.join(",")})`) : cleanupQuery;
-          await cleanupQuery;
+          const boardCleanupRes = await cleanupQuery;
+          boardDebug.boardWideDeletedCount = boardCleanupRes.count;
+          if (boardCleanupRes.error) boardDebug.boardWideDeleteError = boardCleanupRes.error.message;
         }
 
         const listsRes = await fetch(`${TRELLO_BASE}/boards/${board_id}/lists?fields=id,name&${auth}`);
         const lists = await listsRes.json();
+        boardDebug.listsStatus = listsRes.status;
+        boardDebug.allListNames = Array.isArray(lists) ? lists.map((l: any) => l.name) : lists;
         const testingLists = Array.isArray(lists)
           ? lists.filter((l: any) => l.name.toLowerCase().includes("testing"))
           : [];
+        boardDebug.testingListNames = testingLists.map((l: any) => l.name);
 
         for (const list of testingLists) {
           const cardsRes = await fetch(
@@ -308,7 +322,7 @@ Deno.serve(async (req) => {
         }
       }
 
-      return new Response(JSON.stringify({ success: true, count: totalCount, scanned: totalScanned, debug }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      return new Response(JSON.stringify({ success: true, count: totalCount, scanned: totalScanned, debug, boardsScanned }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     return new Response(JSON.stringify({ error: "Acción desconocida" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
